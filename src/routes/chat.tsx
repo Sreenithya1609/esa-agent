@@ -1,14 +1,21 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useEffect, useRef, useState, useCallback } from "react";
-import { useChat } from "@ai-sdk/react";
-import { DefaultChatTransport } from "ai";
 import {
   Send, Paperclip, Mic, MicOff, StopCircle, Sparkles, Bot, User,
   FileText, Upload, HardDrive, Link as LinkIcon, X, Zap,
+  TrendingUp, BarChart2, Globe, Search, ArrowRight, Brain, Settings,
+  AlertTriangle
 } from "lucide-react";
 import { DashboardLayout } from "@/components/DashboardLayout";
-import { ToolCallRenderer } from "@/components/GenUI";
+import { useChatContext } from "@/lib/ChatContext";
+import { usePersona } from "@/lib/PersonaContext";
+import { useMemory } from "@/lib/MemoryContext";
+import { OrchestrationTrace } from "@/components/chat/OrchestrationTrace";
+import { GenerativeResponse } from "@/components/chat/GenerativeResponse";
 import { AGENT_META, type AgentKey } from "@/lib/mockData";
+import { TEMPLATES } from "@/mock/templates";
+import { toast } from "sonner";
+import { motion } from "framer-motion";
 
 export const Route = createFileRoute("/chat")({
   head: () => ({ meta: [{ title: "AI Chat — ESA" }] }),
@@ -16,86 +23,58 @@ export const Route = createFileRoute("/chat")({
   component: ChatPage,
 });
 
+const AGENT_ICONS: Record<AgentKey, any> = {
+  strategy: TrendingUp,
+  data: BarChart2,
+  search: Search,
+  research: Globe,
+};
+
 // ── Agent status bar — pulses while streaming ─────────────────────────────────
 function AgentBar({ streaming }: { streaming: boolean }) {
+  const { activePersona } = usePersona();
   const [activeIdx, setActiveIdx] = useState<number[]>([]);
+
+  // Filter agents by current active persona capabilities
+  const activeAgents = activePersona?.agents ?? (Object.keys(AGENT_META) as AgentKey[]);
 
   useEffect(() => {
     if (!streaming) { setActiveIdx([]); return; }
     // Stagger agents lighting up
-    const keys = Object.keys(AGENT_META) as AgentKey[];
     const timers: ReturnType<typeof setTimeout>[] = [];
-    keys.forEach((_, i) => {
+    activeAgents.forEach((_, i) => {
       timers.push(setTimeout(() => setActiveIdx((p) => [...p, i]), i * 400));
     });
     return () => timers.forEach(clearTimeout);
-  }, [streaming]);
+  }, [streaming, activeAgents]);
 
   return (
-    <div className="flex items-center gap-2 px-4 py-2.5 border-b border-[#E4E8F4] overflow-x-auto shrink-0"
-         style={{ background: "rgba(247,248,252,0.95)", backdropFilter: "blur(8px)" }}>
-      <span className="text-[11px] text-[#8A93B0] font-medium shrink-0 mr-1">Agents</span>
-      {(Object.keys(AGENT_META) as AgentKey[]).map((k, i) => {
+    <div className="flex items-center gap-2 px-4 py-2.5 border-b border-border/40 overflow-x-auto shrink-0 bg-background/95 backdrop-blur-md">
+      <span className="text-[11px] text-muted-foreground font-semibold shrink-0 mr-1 uppercase tracking-wider">Active Agents</span>
+      {activeAgents.map((k, i) => {
         const m = AGENT_META[k];
         const isActive = streaming && activeIdx.includes(i);
+        const Icon = AGENT_ICONS[k] || Sparkles;
         return (
           <div key={k}
-               className="flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-medium shrink-0 transition-all duration-300"
+               className="flex items-center gap-1.5 px-3 py-1 rounded-full text-[11px] font-semibold shrink-0 transition-all duration-300 border"
                style={{
-                 background: isActive ? m.color + "15" : "#F0F2FA",
-                 border: `1px solid ${isActive ? m.color + "55" : "#E4E8F4"}`,
-                 color: isActive ? m.color : "#8A93B0",
-                 transform: isActive ? "scale(1.05)" : "scale(1)",
+                 background: isActive ? m.color + "15" : "transparent",
+                 borderColor: isActive ? m.color + "55" : "var(--color-border)",
+                 color: isActive ? m.color : "var(--color-muted-foreground)",
+                 transform: isActive ? "scale(1.02)" : "scale(1)",
                }}>
-            <span className="w-1.5 h-1.5 rounded-full shrink-0 transition-all"
-                  style={{
-                    background: isActive ? m.color : "#D6DCF0",
-                    boxShadow: isActive ? `0 0 8px ${m.color}` : "none",
-                    animation: isActive ? "pulse 1.5s ease-in-out infinite" : "none",
-                  }} />
+            <Icon className="w-3.5 h-3.5 shrink-0" />
             {m.name}
           </div>
         );
       })}
       {streaming && (
-        <div className="ml-auto flex items-center gap-1.5 text-[11px] text-[#4F6EF7] font-medium shrink-0">
-          <Zap className="w-3 h-3" />
-          Processing
-          <span className="flex gap-0.5">
-            {[0,1,2].map((d) => (
-              <span key={d} className="w-1 h-1 rounded-full bg-[#4F6EF7] animate-bounce"
-                    style={{ animationDelay: `${d * 0.15}s` }} />
-            ))}
-          </span>
+        <div className="ml-auto flex items-center gap-1.5 text-[11.5px] text-primary font-bold shrink-0 animate-pulse">
+          <Zap className="w-3.5 h-3.5" />
+          ESA is orchestrating...
         </div>
       )}
-    </div>
-  );
-}
-
-// ── Markdown renderer ─────────────────────────────────────────────────────────
-function MdText({ text }: { text: string }) {
-  if (!text) return null;
-  return (
-    <div className="space-y-1 text-[14px] leading-[1.7]">
-      {text.split("\n").map((line, i) => {
-        if (!line.trim()) return <div key={i} className="h-1" />;
-        const html = line
-          .replace(/\*\*(.*?)\*\*/g, "<strong>$1</strong>")
-          .replace(/`(.*?)`/g, "<code class='px-1.5 py-0.5 rounded-md bg-[#F0F2FA] text-[12px] font-mono text-[#4F6EF7]'>$1</code>");
-        if (/^\d+\./.test(line))
-          return <div key={i} className="pl-4 text-[#4B526B]" dangerouslySetInnerHTML={{ __html: html }} />;
-        if (line.startsWith("- ") || line.startsWith("• "))
-          return (
-            <div key={i} className="pl-3 flex gap-2 text-[#4B526B]">
-              <span className="text-[#4F6EF7] mt-1.5 shrink-0">▸</span>
-              <span dangerouslySetInnerHTML={{ __html: html.replace(/^[-•]\s/, "") }} />
-            </div>
-          );
-        if (line.startsWith("# ") || line.startsWith("## "))
-          return <div key={i} className="font-semibold text-[#0F1117] text-[15px] mt-2" dangerouslySetInnerHTML={{ __html: html.replace(/^#+\s/, "") }} />;
-        return <div key={i} className="text-[#4B526B]" dangerouslySetInnerHTML={{ __html: html }} />;
-      })}
     </div>
   );
 }
@@ -114,22 +93,22 @@ function FileModal({ onClose, onAttach }: { onClose: () => void; onAttach: (n: s
   ];
   return (
     <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center px-4 pb-4 sm:pb-0" onClick={onClose}>
-      <div className="absolute inset-0 bg-black/30" />
-      <div className="relative w-full max-w-sm bg-white rounded-2xl border border-[#D6DCF0] overflow-hidden"
-           style={{ boxShadow: "0 20px 64px rgba(79,110,247,0.14)" }} onClick={(e) => e.stopPropagation()}>
-        <div className="flex items-center justify-between px-4 py-3 border-b border-[#E4E8F4]">
-          <span className="text-[14px] font-semibold text-[#0F1117]">Attach a file</span>
-          <button onClick={onClose} className="p-1 hover:bg-[#F0F2FA] rounded-md"><X className="w-4 h-4 text-[#8A93B0]" /></button>
+      <div className="absolute inset-0 bg-black/45 backdrop-blur-xs" />
+      <div className="relative w-full max-w-sm bg-popover rounded-2xl border border-border overflow-hidden shadow-2xl"
+           onClick={(e) => e.stopPropagation()}>
+        <div className="flex items-center justify-between px-4 py-3 border-b border-border/50">
+          <span className="text-sm font-bold text-foreground">Attach a file</span>
+          <button onClick={onClose} className="p-1 hover:bg-muted rounded-md cursor-pointer"><X className="w-4 h-4 text-muted-foreground" /></button>
         </div>
-        <div className="p-2">
+        <div className="p-2 space-y-0.5">
           {opts.map((o) => { const Icon = o.icon; return (
-            <button key={o.label} onClick={o.fn} className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl hover:bg-[#F0F2FA] transition-colors text-left">
-              <div className="w-9 h-9 rounded-lg flex items-center justify-center shrink-0 bg-[#F0F2FA]">
-                <Icon className="w-4 h-4 text-[#4F6EF7]" strokeWidth={1.5} />
+            <button key={o.label} onClick={o.fn} className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl hover:bg-muted/80 transition-all text-left cursor-pointer">
+              <div className="w-9 h-9 rounded-lg flex items-center justify-center shrink-0 bg-muted/60 text-primary">
+                <Icon className="w-4 h-4" strokeWidth={1.5} />
               </div>
               <div>
-                <div className="text-[13px] font-medium text-[#0F1117]">{o.label}</div>
-                <div className="text-[11px] text-[#8A93B0]">{o.sub}</div>
+                <div className="text-[13px] font-bold text-foreground leading-snug">{o.label}</div>
+                <div className="text-[11px] text-muted-foreground">{o.sub}</div>
               </div>
             </button>
           ); })}
@@ -144,16 +123,13 @@ function FileModal({ onClose, onAttach }: { onClose: () => void; onAttach: (n: s
 // ── Voice hook ────────────────────────────────────────────────────────────────
 function useVoice(onResult: (t: string) => void) {
   const [listening, setListening] = useState(false);
-  const rec = useRef<unknown>(null);
+  const rec = useRef<any>(null);
   const toggle = useCallback(() => {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const SR = (window as any).SpeechRecognition ?? (window as any).webkitSpeechRecognition;
     if (!SR) { alert("Voice input not supported. Try Chrome."); return; }
-    if (listening) { (rec.current as { stop: () => void })?.stop(); setListening(false); return; }
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    if (listening) { (rec.current as any)?.stop(); setListening(false); return; }
     const r = new SR() as any;
     r.lang = "en-US"; r.interimResults = false;
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     r.onresult = (e: any) => onResult(e.results[0][0].transcript);
     r.onend = () => setListening(false);
     r.onerror = () => setListening(false);
@@ -169,34 +145,39 @@ function ChatPage() {
   const [input, setInput] = useState("");
   const [files, setFiles] = useState<string[]>([]);
   const [showFile, setShowFile] = useState(false);
-  const [sentAt, setSentAt] = useState<Record<string, string>>({});
 
-  const { messages, sendMessage, stop, status } = useChat({
-    transport: new DefaultChatTransport({ api: "/api/chat" }),
-    onFinish: () => setTimeout(() => bottomRef.current?.scrollIntoView({ behavior: "smooth" }), 50),
-  });
+  const {
+    messages,
+    sendMessage,
+    isProcessing,
+    currentTrace,
+    interruptQuery,
+    clearHistory
+  } = useChatContext();
 
-  const isStreaming = status === "streaming" || status === "submitted";
+  const { activePersona } = usePersona();
+
+  // Stepwise prompter state (Empty State with Intent)
+  const [exploreStep, setExploreStep] = useState<string | null>(null);
+  const [contextInput, setContextInput] = useState("");
+
   const { listening, toggle: toggleVoice } = useVoice((t) => setInput((p) => p + (p ? " " : "") + t));
 
-  // Auto-send query from dashboard
+  // Auto-send query from URL query params
   useEffect(() => {
     if (q && messages.length === 0) {
-      sendMessage({ role: "user", parts: [{ type: "text", text: q }] });
-      setSentAt((p) => ({ ...p, auto: ts() }));
+      sendMessage(q);
     }
-  }, []);
+  }, [q]);
 
   useEffect(() => {
     setTimeout(() => bottomRef.current?.scrollIntoView({ behavior: "smooth" }), 80);
-  }, [messages.length]);
+  }, [messages.length, isProcessing]);
 
   function send(text?: string) {
     const msg = (text ?? input).trim();
     if (!msg) return;
-    const id = Date.now().toString();
-    setSentAt((p) => ({ ...p, [id]: ts() }));
-    sendMessage({ role: "user", parts: [{ type: "text", text: msg }] });
+    sendMessage(msg);
     setInput("");
     setFiles([]);
   }
@@ -205,50 +186,158 @@ function ChatPage() {
     if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); send(); }
   }
 
+  const handleStepSubmit = () => {
+    if (!exploreStep) return;
+    const finalQuery = `${exploreStep} ${contextInput.trim() ? `— focusing on ${contextInput.trim()}` : ''}`;
+    sendMessage(finalQuery);
+    // Reset wizard
+    setExploreStep(null);
+    setContextInput('');
+  };
+
   return (
     <DashboardLayout title="AI Chat" hideRight>
       <div className="flex flex-col min-h-0" style={{ height: "calc(100vh - 56px)" }}>
 
         {/* Agent status bar */}
-        <AgentBar streaming={isStreaming} />
+        <AgentBar streaming={isProcessing} />
 
         {/* Messages */}
-        <div className="flex-1 overflow-y-auto px-4 sm:px-6 py-6"
-             style={{ background: "linear-gradient(160deg, #F7F8FC 0%, #EEF1FA 100%)" }}>
+        <div className="flex-1 overflow-y-auto px-4 sm:px-6 py-6 bg-muted/5">
           <div className="max-w-3xl mx-auto space-y-6">
 
-            {/* Empty state */}
-            {messages.length === 0 && !isStreaming && (
-              <div className="flex flex-col items-center justify-center py-20 text-center">
-                <div className="w-16 h-16 rounded-2xl mb-5 flex items-center justify-center"
-                     style={{ background: "linear-gradient(135deg,#4F6EF7,#9B72F7)", boxShadow: "0 8px 32px rgba(79,110,247,0.3)" }}>
-                  <Sparkles className="w-8 h-8 text-white" strokeWidth={1.5} />
+            {/* Empty state with Intent (Persona-Aware & Wizard) */}
+            {messages.length === 0 && !isProcessing && (
+              <div className="flex flex-col items-center justify-center py-8 text-center space-y-8">
+                
+                {/* Persona Header */}
+                <div className="flex flex-col items-center space-y-3">
+                  <div className="w-14 h-14 rounded-2xl flex items-center justify-center bg-primary/10 border border-primary/20 text-primary shadow-sm">
+                    <Sparkles className="w-7 h-7" strokeWidth={1.5} />
+                  </div>
+                  <div>
+                    <h3 className="text-base font-bold text-foreground">
+                      Ask ESA anything as <span className="text-primary">{activePersona.name}</span>
+                    </h3>
+                    <p className="text-xs text-muted-foreground max-w-sm mt-0.5">
+                      Tailored workspace prompts and execution templates are active.
+                    </p>
+                  </div>
                 </div>
-                <h3 className="text-[18px] font-semibold text-[#0F1117] mb-2">Ask ESA anything</h3>
-                <p className="text-[14px] text-[#8A93B0] max-w-sm">
-                  Strategy · Data Analysis · Market Research · Knowledge Search
-                </p>
-                <div className="mt-6 flex flex-wrap gap-2 justify-center">
-                  {["Show Q3 revenue trends", "Benchmark SaaS pricing", "Find HR leave policy", "Build GTM strategy"].map((p) => (
-                    <button key={p} onClick={() => send(p)}
-                            className="px-3.5 py-1.5 rounded-full text-[13px] text-[#4B526B] border border-[#E4E8F4] bg-white hover:border-[#4F6EF7] hover:text-[#4F6EF7] transition-all"
-                            style={{ boxShadow: "0 1px 4px rgba(79,110,247,0.08)" }}>
-                      {p}
-                    </button>
-                  ))}
+
+                {/* Suggested Persona Prompts */}
+                <div className="space-y-2.5 max-w-xl">
+                  <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider">
+                    Suggested Prompts for {activePersona.name}
+                  </span>
+                  <div className="flex flex-wrap gap-2 justify-center">
+                    {activePersona.suggestedPrompts.map((p) => (
+                      <button key={p} onClick={() => send(p)}
+                              className="px-3.5 py-1.5 rounded-xl text-xs font-semibold text-muted-foreground border border-border/80 bg-card hover:border-primary/50 hover:text-primary transition-all cursor-pointer shadow-xs">
+                        {p}
+                      </button>
+                    ))}
+                  </div>
                 </div>
+
+                {/* Recently used Templates */}
+                <div className="space-y-2.5 w-full max-w-xl">
+                  <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider block">
+                    Recently Used Templates
+                  </span>
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                    {TEMPLATES.slice(0, 3).map((tpl) => (
+                      <button
+                        key={tpl.id}
+                        onClick={() => send(`Build a report using the ${tpl.name} template`)}
+                        className="bg-card hover:bg-muted/10 border border-border/80 hover:border-border rounded-xl p-3 text-left space-y-1.5 transition-all cursor-pointer shadow-xs"
+                      >
+                        <div className="flex items-center gap-1.5 text-primary text-xs font-bold">
+                          <Brain className="w-3.5 h-3.5 shrink-0" />
+                          <span className="truncate">{tpl.name}</span>
+                        </div>
+                        <p className="text-[10px] text-muted-foreground line-clamp-2 leading-relaxed">
+                          {tpl.description}
+                        </p>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Stepwise Prompter (Wizard) */}
+                <div className="bg-card border border-border shadow-sm rounded-2xl p-5 w-full max-w-xl text-left space-y-4">
+                  <div className="flex items-center gap-2 pb-2 border-b border-border/50">
+                    <Zap className="w-4 h-4 text-primary" />
+                    <span className="text-xs font-bold text-foreground uppercase tracking-wider">Quick Start Stepwise Prompter</span>
+                  </div>
+
+                  {/* Step 1: Select category */}
+                  <div className="space-y-2">
+                    <span className="text-[10px] font-bold text-muted-foreground uppercase">Step 1: What would you like to explore?</span>
+                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                      {[
+                        { label: 'GTM Strategy', query: 'Build GTM strategy' },
+                        { label: 'Revenue Trends', query: 'Show Q3 revenue trends' },
+                        { label: 'Market sizing', query: 'Research SaaS market sizing' },
+                        { label: 'Policy Search', query: 'Search HR leave policy' },
+                      ].map((item) => (
+                        <button
+                          key={item.label}
+                          onClick={() => setExploreStep(item.query)}
+                          className={`py-2 px-3 border rounded-xl text-xs font-semibold text-center transition-all cursor-pointer ${
+                            exploreStep === item.query
+                              ? 'border-primary bg-primary/5 text-primary'
+                              : 'border-border hover:bg-muted/40 text-muted-foreground'
+                          }`}
+                        >
+                          {item.label}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Step 2: Add context details */}
+                  {exploreStep && (
+                    <motion.div
+                      initial={{ opacity: 0, y: 5 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      className="space-y-3 pt-1"
+                    >
+                      <div className="space-y-1">
+                        <label className="text-[10px] font-bold text-muted-foreground uppercase block">
+                          Step 2: Add optional context (Target market, budget, specific competitor)
+                        </label>
+                        <input
+                          type="text"
+                          value={contextInput}
+                          onChange={(e) => setContextInput(e.target.value)}
+                          placeholder="e.g. Focus on India SMBs with a $20K budget..."
+                          className="w-full bg-muted/40 border border-border rounded-lg px-2.5 py-1.5 text-xs text-foreground placeholder-muted-foreground outline-none focus:border-primary/50"
+                        />
+                      </div>
+
+                      <button
+                        onClick={handleStepSubmit}
+                        className="inline-flex items-center gap-1.5 py-1.5 px-3.5 bg-primary text-primary-foreground hover:bg-primary/95 rounded-lg text-xs font-semibold transition-all cursor-pointer shadow-xs"
+                      >
+                        Submit Request
+                        <ArrowRight className="w-3.5 h-3.5" />
+                      </button>
+                    </motion.div>
+                  )}
+                </div>
+
               </div>
             )}
 
-            {/* Messages */}
-            {messages.map((m, mi) => (
-              <div key={m.id} className={`flex gap-3 ${m.role === "user" ? "justify-end" : "justify-start"}`}
-                   style={{ animation: "fadeSlideIn 0.25s ease-out both" }}>
+            {/* Active Message History */}
+            {messages.map((m) => (
+              <div key={m.id} className={`flex gap-3.5 ${m.role === "user" ? "justify-end" : "justify-start"}`}>
 
                 {m.role === "assistant" && (
-                  <div className="w-9 h-9 rounded-xl shrink-0 flex items-center justify-center mt-0.5"
-                       style={{ background: "linear-gradient(135deg,#4F6EF7,#9B72F7)", boxShadow: "0 4px 12px rgba(79,110,247,0.3)" }}>
-                    <Bot className="w-4.5 h-4.5 text-white" strokeWidth={1.5} />
+                  <div className="w-9 h-9 rounded-xl shrink-0 flex items-center justify-center mt-0.5 border border-primary/20 text-white shadow-sm"
+                       style={{ background: "linear-gradient(135deg,#4F6EF7,#9B72F7)" }}>
+                    <Bot className="w-4.5 h-4.5" strokeWidth={1.5} />
                   </div>
                 )}
 
@@ -256,53 +345,45 @@ function ChatPage() {
                   <div className={`rounded-2xl px-4 py-3.5 ${
                     m.role === "user"
                       ? "text-white rounded-tr-sm"
-                      : "bg-white rounded-tl-sm"
+                      : "bg-card rounded-tl-sm"
                   }`}
                   style={m.role === "user"
-                    ? { background: "linear-gradient(135deg,#4F6EF7,#6B82F7)", boxShadow: "0 4px 16px rgba(79,110,247,0.25)" }
-                    : { boxShadow: "0 2px 12px rgba(79,110,247,0.08)", border: "1px solid rgba(79,110,247,0.1)" }}>
+                    ? { background: "linear-gradient(135deg,#4F6EF7,#6B82F7)", boxShadow: "0 4px 16px rgba(79,110,247,0.15)" }
+                    : { boxShadow: "0 2px 12px rgba(79,110,247,0.06)", border: "1px solid var(--color-border)" }}>
 
                     {m.role === "user" ? (
-                      <p className="text-[14px] leading-[1.6]">
-                        {m.parts.filter((p) => p.type === "text").map((p) => (p as { type: "text"; text: string }).text).join("")}
+                      <p className="text-xs font-semibold leading-relaxed">
+                        {m.content}
                       </p>
                     ) : (
-                      <div className="space-y-3">
-                        {m.parts.map((part, pi) => {
-                          const p = part as Record<string, unknown>;
-                          if (p.type === "text") {
-                            const text = p.text as string;
-                            return text ? <MdText key={pi} text={text} /> : null;
-                          }
-                          if (typeof p.type === "string" && p.type.startsWith("tool-")) {
-                            const toolName = (p.toolName ?? p.title) as string;
-                            const state = p.state as string;
-                            const result = p.output ?? p.result;
-                            return state === "output"
-                              ? <ToolCallRenderer key={pi} toolName={toolName} result={result} />
-                              : (
-                                <div key={pi} className="rounded-xl p-3 flex items-center gap-2.5"
-                                     style={{ background: "rgba(79,110,247,0.06)", border: "1px solid rgba(79,110,247,0.15)" }}>
-                                  <Sparkles className="w-4 h-4 text-[#4F6EF7] animate-spin shrink-0" />
-                                  <span className="text-[13px] text-[#4F6EF7] font-medium">
-                                    Generating {String(toolName ?? "").replace("show","").replace(/([A-Z])/g," $1").trim()}…
-                                  </span>
-                                </div>
-                              );
-                          }
-                          return null;
-                        })}
+                      <div className="space-y-4">
+                        {/* 1. Rendering of trace inside assistant bubble, collapsed by default */}
+                        {m.trace && (
+                          <OrchestrationTrace trace={m.trace} />
+                        )}
+                        {/* 1.5. Notice if agent is disabled */}
+                        {m.unavailableAgentMessage && (
+                          <div className="bg-amber-500/10 border border-amber-500/25 text-amber-600 rounded-xl p-3.5 text-xs flex items-start gap-2.5 shadow-xs">
+                            <AlertTriangle className="w-4 h-4 shrink-0 text-amber-500 mt-0.5" />
+                            <div className="space-y-0.5">
+                              <span className="font-semibold">Agent Access Notice</span>
+                              <p className="text-[11px] text-muted-foreground leading-relaxed">{m.unavailableAgentMessage}</p>
+                            </div>
+                          </div>
+                        )}
+                        {/* 2. Rendering of the structured response card */}
+                        <GenerativeResponse message={m} />
                       </div>
                     )}
 
-                    <div className={`text-[11px] mt-2 ${m.role === "user" ? "text-white/60 text-right" : "text-[#8A93B0]"}`}>
-                      {sentAt[m.id] ?? ts()}
+                    <div className={`text-[10px] mt-2.5 ${m.role === "user" ? "text-white/60 text-right" : "text-muted-foreground"}`}>
+                      {m.timestamp}
                     </div>
                   </div>
                 </div>
 
                 {m.role === "user" && (
-                  <div className="w-9 h-9 rounded-xl shrink-0 flex items-center justify-center mt-0.5 text-white"
+                  <div className="w-9 h-9 rounded-xl shrink-0 flex items-center justify-center mt-0.5 text-white border border-primary/20 shadow-sm"
                        style={{ background: "linear-gradient(135deg,#4F6EF7,#9B72F7)" }}>
                     <User className="w-4 h-4" strokeWidth={1.5} />
                   </div>
@@ -310,20 +391,15 @@ function ChatPage() {
               </div>
             ))}
 
-            {/* Streaming indicator */}
-            {isStreaming && messages[messages.length - 1]?.role !== "assistant" && (
-              <div className="flex gap-3 justify-start" style={{ animation: "fadeSlideIn 0.2s ease-out both" }}>
-                <div className="w-9 h-9 rounded-xl flex items-center justify-center"
-                     style={{ background: "linear-gradient(135deg,#4F6EF7,#9B72F7)", boxShadow: "0 4px 12px rgba(79,110,247,0.3)" }}>
-                  <Bot className="w-4.5 h-4.5 text-white" strokeWidth={1.5} />
+            {/* Active Orchestration Trace (Processing state) */}
+            {isProcessing && currentTrace && (
+              <div className="flex gap-3.5 justify-start">
+                <div className="w-9 h-9 rounded-xl shrink-0 flex items-center justify-center mt-0.5 border border-primary/20 text-white shadow-sm"
+                     style={{ background: "linear-gradient(135deg,#4F6EF7,#9B72F7)" }}>
+                  <Bot className="w-4.5 h-4.5" strokeWidth={1.5} />
                 </div>
-                <div className="bg-white rounded-2xl rounded-tl-sm px-4 py-3.5 flex items-center gap-2"
-                     style={{ boxShadow: "0 2px 12px rgba(79,110,247,0.08)", border: "1px solid rgba(79,110,247,0.1)" }}>
-                  <span className="text-[13px] text-[#8A93B0]">ESA is thinking</span>
-                  {[0,1,2].map((d) => (
-                    <span key={d} className="w-1.5 h-1.5 rounded-full bg-[#4F6EF7] animate-bounce"
-                          style={{ animationDelay: `${d * 0.15}s` }} />
-                  ))}
+                <div className="flex-1 bg-card border border-border shadow-sm rounded-2xl rounded-tl-sm px-4 py-3.5">
+                  <OrchestrationTrace trace={currentTrace} isActive={true} />
                 </div>
               </div>
             )}
@@ -333,62 +409,65 @@ function ChatPage() {
         </div>
 
         {/* Input bar */}
-        <div className="border-t border-[#E4E8F4] px-4 sm:px-6 py-4 shrink-0"
-             style={{ background: "rgba(255,255,255,0.97)", backdropFilter: "blur(16px)" }}>
+        <div className="border-t border-border/40 px-4 sm:px-6 py-4 shrink-0 bg-background/95 backdrop-blur-md">
           <div className="max-w-3xl mx-auto">
             {files.length > 0 && (
               <div className="flex flex-wrap gap-2 mb-2">
                 {files.map((f, i) => (
-                  <span key={i} className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[12px] font-medium text-[#4F6EF7]"
-                        style={{ background: "rgba(79,110,247,0.07)", border: "1px solid rgba(79,110,247,0.2)" }}>
-                    <FileText className="w-3 h-3" />
+                  <span key={i} className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-semibold text-primary bg-primary/10 border border-primary/20">
+                    <FileText className="w-3.5 h-3.5" />
                     {f.length > 28 ? f.slice(0, 25) + "…" : f}
-                    <button onClick={() => setFiles((a) => a.filter((_, j) => j !== i))} className="hover:text-red-500"><X className="w-3 h-3" /></button>
+                    <button onClick={() => setFiles((a) => a.filter((_, j) => j !== i))} className="hover:text-red-500 cursor-pointer"><X className="w-3.5 h-3.5" /></button>
                   </span>
                 ))}
               </div>
             )}
 
-            <div className="rounded-2xl border border-[#D6DCF0] bg-white transition-all"
-                 style={{ boxShadow: "0 4px 24px rgba(79,110,247,0.10)" }}>
+            <div className="rounded-2xl border border-border/80 bg-card shadow-sm transition-all focus-within:border-primary/50">
               <textarea value={input} onChange={(e) => setInput(e.target.value)} onKeyDown={handleKey}
                 placeholder="Ask ESA anything about your business..."
-                rows={1} className="w-full resize-none bg-transparent border-0 outline-none text-[15px] text-[#0F1117] placeholder:text-[#8A93B0] px-4 pt-3.5 pb-1 min-h-[52px] max-h-[160px]"
+                rows={1} className="w-full resize-none bg-transparent border-0 outline-none text-xs text-foreground placeholder:text-muted-foreground px-4 pt-3.5 pb-1 min-h-[52px] max-h-[160px]"
                 style={{ fieldSizing: "content" } as React.CSSProperties} />
               <div className="flex items-center justify-between px-3 pb-3">
-                <div className="flex items-center gap-1 text-[#8A93B0]">
+                <div className="flex items-center gap-1.5 text-muted-foreground">
                   <button type="button" onClick={() => setShowFile(true)}
-                          className="p-1.5 hover:bg-[#F0F2FA] rounded-lg transition-colors" title="Attach file">
+                          className="p-1.5 hover:bg-muted rounded-lg transition-colors cursor-pointer" title="Attach file">
                     <Paperclip className="w-4 h-4" strokeWidth={1.5} />
                   </button>
                   <button type="button" onClick={toggleVoice}
-                          className={`p-1.5 rounded-lg transition-colors ${listening ? "bg-red-50 text-red-500" : "hover:bg-[#F0F2FA]"}`}
+                          className={`p-1.5 rounded-lg transition-colors cursor-pointer ${listening ? "bg-red-500/10 text-red-500" : "hover:bg-muted"}`}
                           title={listening ? "Stop" : "Voice input"}>
                     {listening ? <MicOff className="w-4 h-4" strokeWidth={1.5} /> : <Mic className="w-4 h-4" strokeWidth={1.5} />}
                   </button>
-                  {listening && <span className="text-[11px] text-red-500 font-medium animate-pulse ml-1">Listening…</span>}
-                  <div className="flex items-center gap-1.5 ml-2 px-2.5 py-1 rounded-lg text-[11px] font-medium"
-                       style={{ background: "rgba(79,110,247,0.06)", border: "0.5px solid rgba(79,110,247,0.2)" }}>
-                    <Sparkles className="w-3 h-3 text-[#4F6EF7]" />
-                    <span className="text-[#4F6EF7]">ESA · OpenRouter</span>
-                  </div>
+                  {listening && <span className="text-[10px] text-red-500 font-bold animate-pulse ml-1">Listening…</span>}
+                  
+                  {/* Clear history button */}
+                  {messages.length > 0 && (
+                    <button
+                      type="button"
+                      onClick={clearHistory}
+                      className="text-[10px] font-bold text-muted-foreground hover:text-foreground py-1 px-2 hover:bg-muted rounded transition-colors cursor-pointer"
+                    >
+                      Clear Chat
+                    </button>
+                  )}
                 </div>
-                {isStreaming
-                  ? <button type="button" onClick={stop}
-                            className="w-9 h-9 rounded-xl bg-red-500 hover:bg-red-600 text-white flex items-center justify-center transition-all"
-                            style={{ boxShadow: "0 4px 12px rgba(239,68,68,0.3)" }}>
+                
+                {isProcessing
+                  ? <button type="button" onClick={interruptQuery}
+                            className="w-9 h-9 rounded-xl bg-destructive hover:bg-destructive/95 text-white flex items-center justify-center transition-all cursor-pointer shadow-sm">
                       <StopCircle className="w-4 h-4" />
                     </button>
                   : <button type="button" onClick={() => send()} disabled={!input.trim() && files.length === 0}
-                            className="w-9 h-9 rounded-xl text-white flex items-center justify-center disabled:opacity-30 disabled:cursor-not-allowed transition-all"
-                            style={{ background: "linear-gradient(135deg,#4F6EF7,#6B82F7)", boxShadow: "0 4px 12px rgba(79,110,247,0.3)" }}>
+                            className="w-9 h-9 rounded-xl text-white flex items-center justify-center disabled:opacity-30 disabled:cursor-not-allowed transition-all cursor-pointer shadow-sm"
+                            style={{ background: "linear-gradient(135deg,#4F6EF7,#6B82F7)" }}>
                       <Send className="w-4 h-4" />
                     </button>}
               </div>
             </div>
-            <p className="text-center text-[11px] text-[#8A93B0] mt-2">
-              <kbd className="px-1.5 py-0.5 rounded text-[10px] bg-[#F0F2FA] border border-[#E4E8F4]">Enter</kbd> to send ·{" "}
-              <kbd className="px-1.5 py-0.5 rounded text-[10px] bg-[#F0F2FA] border border-[#E4E8F4]">Shift+Enter</kbd> for new line
+            <p className="text-center text-[10px] text-muted-foreground mt-2">
+              <kbd className="px-1.5 py-0.5 rounded text-[9px] bg-muted border border-border/80">Enter</kbd> to send ·{" "}
+              <kbd className="px-1.5 py-0.5 rounded text-[9px] bg-muted border border-border/80">Shift+Enter</kbd> for new line
             </p>
           </div>
         </div>

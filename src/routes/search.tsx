@@ -1,7 +1,8 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useState } from "react";
 import { DashboardLayout } from "@/components/DashboardLayout";
-import { Search as SearchIcon, FileText, Eye, Download, ExternalLink, X } from "lucide-react";
+import { Search as SearchIcon, FileText, Eye, Download, ExternalLink, X, ShieldAlert } from "lucide-react";
+import { useRole } from "@/lib/roleContext";
 
 export const Route = createFileRoute("/search")({
   head: () => ({ meta: [{ title: "Search — ESA" }] }),
@@ -60,12 +61,30 @@ function mockDownload(title: string, content: string, type: string) {
 }
 
 function SearchPage() {
+  const { can } = useRole();
+  const hasAccess = can("run_queries");
   const [query, setQuery] = useState("");
   const [preview, setPreview] = useState<typeof RESULTS[0] | null>(null);
 
   const filtered = query
     ? RESULTS.filter((r) => r.title.toLowerCase().includes(query.toLowerCase()) || r.excerpt.toLowerCase().includes(query.toLowerCase()))
     : RESULTS;
+
+  if (!hasAccess) {
+    return (
+      <DashboardLayout title="Enterprise Search">
+        <div className="flex flex-col items-center justify-center min-h-[60vh] text-center p-6 space-y-4">
+          <div className="w-12 h-12 rounded-full bg-destructive/10 text-destructive flex items-center justify-center shadow-xs">
+            <ShieldAlert className="w-6 h-6" />
+          </div>
+          <h3 className="text-base font-bold text-foreground">Access Denied</h3>
+          <p className="text-xs text-muted-foreground max-w-sm leading-relaxed">
+            You require Query Execution permissions to run searches. Viewer accounts do not have access to search or query workspace databases and files.
+          </p>
+        </div>
+      </DashboardLayout>
+    );
+  }
 
   return (
     <DashboardLayout title="Enterprise Search">

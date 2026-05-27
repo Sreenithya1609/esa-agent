@@ -4,6 +4,8 @@ import { DashboardLayout } from "@/components/DashboardLayout";
 import { User, Building2, Bot, Database, Bell, Shield, Key, CreditCard, Palette, BookOpen, Eye, Copy, Zap } from "lucide-react";
 import { cn } from "@/lib/utils";
 
+import { useRole } from "@/lib/roleContext";
+
 export const Route = createFileRoute("/settings")({
   head: () => ({ meta: [{ title: "Settings — ESA" }] }),
   component: Settings,
@@ -25,17 +27,29 @@ const NAV = [
 const inputClass = "w-full h-10 px-3.5 rounded-md bg-surface border border-border-strong text-[14px] focus:outline-none focus:border-primary focus:ring-4 focus:ring-primary/10";
 
 function Settings() {
-  const [active, setActive] = useState("llm");
+  const { can } = useRole();
+  const hasAdminAccess = can("configure_llm");
+  
+  // Filter settings tabs based on authorization level
+  const allowedNav = NAV.filter((n) => {
+    if (["llm", "workspace", "api", "security"].includes(n.key)) {
+      return hasAdminAccess;
+    }
+    return true;
+  });
+
+  const [active, setActive] = useState(hasAdminAccess ? "llm" : "profile");
+
   return (
     <DashboardLayout title="Settings" hideRight>
       <div className="flex">
-        <aside className="w-[220px] border-r border-border bg-surface min-h-[calc(100vh-56px)] p-2">
-          {NAV.map((n) => {
+        <aside className="w-[220px] border-r border-border bg-surface min-h-[calc(100vh-56px)] p-2 shrink-0">
+          {allowedNav.map((n) => {
             const Icon = n.icon;
             const on = active === n.key;
             return (
               <button key={n.key} onClick={() => setActive(n.key)} className={cn(
-                "w-full flex items-center gap-2.5 h-9 px-3 rounded-md text-[13px] text-left",
+                "w-full flex items-center gap-2.5 h-9 px-3 rounded-md text-[13px] text-left cursor-pointer",
                 on ? "text-primary font-medium" : "text-text-secondary hover:bg-secondary hover:text-text-primary"
               )} style={on ? { background: "rgba(79,110,247,0.08)" } : undefined}>
                 <Icon className="w-4 h-4" strokeWidth={1.5} /> {n.label}
@@ -44,11 +58,30 @@ function Settings() {
           })}
         </aside>
         <div className="flex-1 p-8 max-w-3xl">
+          {active === "profile" && (
+            <div className="bg-surface border border-border rounded-xl p-6 shadow-l1 space-y-4">
+              <h2 className="text-[20px] font-semibold text-text-primary" style={{ fontFamily: "var(--font-display)" }}>Profile Settings</h2>
+              <p className="text-[14px] text-text-secondary">Update your personal account credentials and details.</p>
+              <div className="space-y-4 pt-2 text-xs">
+                <div>
+                  <label className="text-[13px] font-medium text-text-primary mb-1.5 block">Full Name</label>
+                  <input type="text" className={inputClass} defaultValue="Arjun Mehta" />
+                </div>
+                <div>
+                  <label className="text-[13px] font-medium text-text-primary mb-1.5 block">Email Address</label>
+                  <input type="email" className={inputClass} defaultValue="arjun.mehta@acmecorp.com" />
+                </div>
+                <button className="h-9 px-4 rounded-md bg-primary text-white text-[13px] font-medium cursor-pointer">
+                  Save Changes
+                </button>
+              </div>
+            </div>
+          )}
           {active === "llm" && <LlmConfig />}
           {active === "api" && <ApiKeys />}
           {active === "appearance" && <Appearance />}
-          {active !== "llm" && active !== "api" && active !== "appearance" && (
-            <div className="bg-surface border border-border rounded-xl p-8 shadow-l1 text-[14px] text-text-secondary">
+          {active !== "profile" && active !== "llm" && active !== "api" && active !== "appearance" && (
+            <div className="bg-surface border border-border rounded-xl p-8 shadow-l1 text-[14px] text-text-secondary font-semibold">
               {NAV.find(n => n.key === active)?.label} settings — coming soon.
             </div>
           )}

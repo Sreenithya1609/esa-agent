@@ -22,8 +22,11 @@ import { Route as BillingRouteImport } from './routes/billing'
 import { Route as AuditRouteImport } from './routes/audit'
 import { Route as AnalyticsRouteImport } from './routes/analytics'
 import { Route as IndexRouteImport } from './routes/index'
+import { Route as SettingsPersonasRouteImport } from './routes/settings.personas'
+import { Route as SettingsMemoryRouteImport } from './routes/settings.memory'
 import { Route as OnboardingWorkspaceRouteImport } from './routes/onboarding.workspace'
 import { Route as OnboardingProfileRouteImport } from './routes/onboarding.profile'
+import { Route as AdminControlRoomRouteImport } from './routes/admin.control-room'
 
 const TeamRoute = TeamRouteImport.update({
   id: '/team',
@@ -90,6 +93,16 @@ const IndexRoute = IndexRouteImport.update({
   path: '/',
   getParentRoute: () => rootRouteImport,
 } as any)
+const SettingsPersonasRoute = SettingsPersonasRouteImport.update({
+  id: '/personas',
+  path: '/personas',
+  getParentRoute: () => SettingsRoute,
+} as any)
+const SettingsMemoryRoute = SettingsMemoryRouteImport.update({
+  id: '/memory',
+  path: '/memory',
+  getParentRoute: () => SettingsRoute,
+} as any)
 const OnboardingWorkspaceRoute = OnboardingWorkspaceRouteImport.update({
   id: '/onboarding/workspace',
   path: '/onboarding/workspace',
@@ -98,6 +111,11 @@ const OnboardingWorkspaceRoute = OnboardingWorkspaceRouteImport.update({
 const OnboardingProfileRoute = OnboardingProfileRouteImport.update({
   id: '/onboarding/profile',
   path: '/onboarding/profile',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const AdminControlRoomRoute = AdminControlRoomRouteImport.update({
+  id: '/admin/control-room',
+  path: '/admin/control-room',
   getParentRoute: () => rootRouteImport,
 } as any)
 
@@ -113,10 +131,13 @@ export interface FileRoutesByFullPath {
   '/profile': typeof ProfileRoute
   '/reports': typeof ReportsRoute
   '/search': typeof SearchRoute
-  '/settings': typeof SettingsRoute
+  '/settings': typeof SettingsRouteWithChildren
   '/team': typeof TeamRoute
+  '/admin/control-room': typeof AdminControlRoomRoute
   '/onboarding/profile': typeof OnboardingProfileRoute
   '/onboarding/workspace': typeof OnboardingWorkspaceRoute
+  '/settings/memory': typeof SettingsMemoryRoute
+  '/settings/personas': typeof SettingsPersonasRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
@@ -130,10 +151,13 @@ export interface FileRoutesByTo {
   '/profile': typeof ProfileRoute
   '/reports': typeof ReportsRoute
   '/search': typeof SearchRoute
-  '/settings': typeof SettingsRoute
+  '/settings': typeof SettingsRouteWithChildren
   '/team': typeof TeamRoute
+  '/admin/control-room': typeof AdminControlRoomRoute
   '/onboarding/profile': typeof OnboardingProfileRoute
   '/onboarding/workspace': typeof OnboardingWorkspaceRoute
+  '/settings/memory': typeof SettingsMemoryRoute
+  '/settings/personas': typeof SettingsPersonasRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -148,10 +172,13 @@ export interface FileRoutesById {
   '/profile': typeof ProfileRoute
   '/reports': typeof ReportsRoute
   '/search': typeof SearchRoute
-  '/settings': typeof SettingsRoute
+  '/settings': typeof SettingsRouteWithChildren
   '/team': typeof TeamRoute
+  '/admin/control-room': typeof AdminControlRoomRoute
   '/onboarding/profile': typeof OnboardingProfileRoute
   '/onboarding/workspace': typeof OnboardingWorkspaceRoute
+  '/settings/memory': typeof SettingsMemoryRoute
+  '/settings/personas': typeof SettingsPersonasRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -169,8 +196,11 @@ export interface FileRouteTypes {
     | '/search'
     | '/settings'
     | '/team'
+    | '/admin/control-room'
     | '/onboarding/profile'
     | '/onboarding/workspace'
+    | '/settings/memory'
+    | '/settings/personas'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
@@ -186,8 +216,11 @@ export interface FileRouteTypes {
     | '/search'
     | '/settings'
     | '/team'
+    | '/admin/control-room'
     | '/onboarding/profile'
     | '/onboarding/workspace'
+    | '/settings/memory'
+    | '/settings/personas'
   id:
     | '__root__'
     | '/'
@@ -203,8 +236,11 @@ export interface FileRouteTypes {
     | '/search'
     | '/settings'
     | '/team'
+    | '/admin/control-room'
     | '/onboarding/profile'
     | '/onboarding/workspace'
+    | '/settings/memory'
+    | '/settings/personas'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -219,8 +255,9 @@ export interface RootRouteChildren {
   ProfileRoute: typeof ProfileRoute
   ReportsRoute: typeof ReportsRoute
   SearchRoute: typeof SearchRoute
-  SettingsRoute: typeof SettingsRoute
+  SettingsRoute: typeof SettingsRouteWithChildren
   TeamRoute: typeof TeamRoute
+  AdminControlRoomRoute: typeof AdminControlRoomRoute
   OnboardingProfileRoute: typeof OnboardingProfileRoute
   OnboardingWorkspaceRoute: typeof OnboardingWorkspaceRoute
 }
@@ -318,6 +355,20 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof IndexRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/settings/personas': {
+      id: '/settings/personas'
+      path: '/personas'
+      fullPath: '/settings/personas'
+      preLoaderRoute: typeof SettingsPersonasRouteImport
+      parentRoute: typeof SettingsRoute
+    }
+    '/settings/memory': {
+      id: '/settings/memory'
+      path: '/memory'
+      fullPath: '/settings/memory'
+      preLoaderRoute: typeof SettingsMemoryRouteImport
+      parentRoute: typeof SettingsRoute
+    }
     '/onboarding/workspace': {
       id: '/onboarding/workspace'
       path: '/onboarding/workspace'
@@ -332,8 +383,29 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof OnboardingProfileRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/admin/control-room': {
+      id: '/admin/control-room'
+      path: '/admin/control-room'
+      fullPath: '/admin/control-room'
+      preLoaderRoute: typeof AdminControlRoomRouteImport
+      parentRoute: typeof rootRouteImport
+    }
   }
 }
+
+interface SettingsRouteChildren {
+  SettingsMemoryRoute: typeof SettingsMemoryRoute
+  SettingsPersonasRoute: typeof SettingsPersonasRoute
+}
+
+const SettingsRouteChildren: SettingsRouteChildren = {
+  SettingsMemoryRoute: SettingsMemoryRoute,
+  SettingsPersonasRoute: SettingsPersonasRoute,
+}
+
+const SettingsRouteWithChildren = SettingsRoute._addFileChildren(
+  SettingsRouteChildren,
+)
 
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
@@ -347,8 +419,9 @@ const rootRouteChildren: RootRouteChildren = {
   ProfileRoute: ProfileRoute,
   ReportsRoute: ReportsRoute,
   SearchRoute: SearchRoute,
-  SettingsRoute: SettingsRoute,
+  SettingsRoute: SettingsRouteWithChildren,
   TeamRoute: TeamRoute,
+  AdminControlRoomRoute: AdminControlRoomRoute,
   OnboardingProfileRoute: OnboardingProfileRoute,
   OnboardingWorkspaceRoute: OnboardingWorkspaceRoute,
 }

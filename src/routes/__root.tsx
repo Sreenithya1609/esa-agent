@@ -8,6 +8,10 @@ import {
   Scripts,
 } from "@tanstack/react-router";
 import { RoleProvider } from "@/lib/roleContext";
+import { PermissionsProvider } from "@/lib/PermissionsContext";
+import { MemoryProvider } from "@/lib/MemoryContext";
+import { PersonaProvider } from "@/lib/PersonaContext";
+import { ChatProvider } from "@/lib/ChatContext";
 
 import appCss from "../styles.css?url";
 
@@ -115,7 +119,15 @@ function RootComponent() {
   return (
     <QueryClientProvider client={queryClient}>
       <RoleProvider>
-        <Outlet />
+        <PermissionsProvider>
+          <MemoryProvider>
+            <PersonaProvider>
+              <ChatProvider>
+                <Outlet />
+              </ChatProvider>
+            </PersonaProvider>
+          </MemoryProvider>
+        </PermissionsProvider>
       </RoleProvider>
     </QueryClientProvider>
   );

@@ -3,24 +3,35 @@ import {
   LayoutDashboard, MessageSquare, BarChart2, Database, FileText, Users,
   Settings, CreditCard, ClipboardList, Bell, Search, ChevronDown,
   PanelLeftClose, PanelLeftOpen, Menu, PanelRightClose, PanelRightOpen,
+  Shield, Brain, Sliders
 } from "lucide-react";
 import { useState, type ReactNode } from "react";
 import { EsaLogo, AgentDot } from "./EsaLogo";
 import { MOCK_DATA_SOURCES, AGENT_META, type AgentKey } from "@/lib/mockData";
 import { useRole, ROLE_LABELS, ROLE_COLORS, type Permission } from "@/lib/roleContext";
 import { cn } from "@/lib/utils";
+import { PersonaSwitcher } from "./persona/PersonaSwitcher";
+import { usePersona } from "@/lib/PersonaContext";
 
 const ALL_NAV = [
-  { to: "/dashboard", label: "Dashboard",   icon: LayoutDashboard, permission: null },
-  { to: "/chat",      label: "AI Chat",      icon: MessageSquare,   permission: "run_queries" as Permission },
-  { to: "/analytics", label: "Analytics",    icon: BarChart2,       permission: "view_analytics" as Permission },
-  { to: "/data",      label: "Data Sources", icon: Database,        permission: null },
-  { to: "/reports",   label: "Reports",      icon: FileText,        permission: null },
-  { to: "/search",    label: "Search",       icon: Search,          permission: null },
-  { to: "/team",      label: "Team",         icon: Users,           permission: "invite_users" as Permission },
-  { to: "/settings",  label: "Settings",     icon: Settings,        permission: null },
-  { to: "/billing",   label: "Billing",      icon: CreditCard,      permission: "manage_billing" as Permission },
-  { to: "/audit",     label: "Audit Logs",   icon: ClipboardList,   permission: "view_audit_logs" as Permission },
+  // Main
+  { to: "/dashboard", label: "Dashboard",   icon: LayoutDashboard, permission: null, category: "Main" },
+  { to: "/chat",      label: "AI Chat",      icon: MessageSquare,   permission: "run_queries" as Permission, category: "Main" },
+  { to: "/search",    label: "Search",       icon: Search,          permission: null, category: "Main" },
+  { to: "/reports",   label: "Reports",      icon: FileText,        permission: null, category: "Main" },
+  { to: "/data",      label: "Data Sources", icon: Database,        permission: null, category: "Main" },
+  { to: "/analytics", label: "Analytics",    icon: BarChart2,       permission: "view_analytics" as Permission, category: "Main" },
+  
+  // Admin Tools
+  { to: "/admin/control-room", label: "Control Room", icon: Shield, permission: "view_audit_logs" as Permission, category: "Admin Tools" },
+  { to: "/team",      label: "Team",         icon: Users,           permission: "invite_users" as Permission, category: "Admin Tools" },
+  { to: "/audit",     label: "Audit Logs",   icon: ClipboardList,   permission: "view_audit_logs" as Permission, category: "Admin Tools" },
+  
+  // Settings
+  { to: "/settings",  label: "Settings",     icon: Settings,        permission: null, category: "Settings" },
+  { to: "/settings/memory", label: "Memory", icon: Brain,           permission: "configure_llm" as Permission, category: "Settings" },
+  { to: "/settings/personas", label: "Personas", icon: Sliders,     permission: "configure_llm" as Permission, category: "Settings" },
+  { to: "/billing",   label: "Billing",      icon: CreditCard,      permission: "manage_billing" as Permission, category: "Settings" },
 ];
 
 export function DashboardLayout({
@@ -37,15 +48,14 @@ export function DashboardLayout({
   activeAgents?: AgentKey[];
 }) {
   const [sidebarOpen, setSidebarOpen] = useState(false);
-  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [rightOpen, setRightOpen] = useState(!hideRight);
+  const [settingsOpen, setSettingsOpen] = useState(false);
+  const [leftSidebarExpanded, setLeftSidebarExpanded] = useState(false);
   const location = useLocation();
   const { user, can } = useRole();
 
   // Filter nav by role permissions
   const NAV = ALL_NAV.filter((item) => item.permission === null || can(item.permission));
-
-  const sidebarWidth = sidebarCollapsed ? 64 : 220;
 
   return (
     <div className="min-h-screen flex bg-[#F7F8FC]">
@@ -62,91 +72,189 @@ export function DashboardLayout({
 
         <aside
           className={cn(
-            "bg-surface border-r border-border flex flex-col shrink-0 transition-all duration-300 z-40",
-            // mobile: fixed overlay
-            "fixed md:relative inset-y-0 left-0",
-            // mobile hide/show
-            sidebarOpen ? "translate-x-0" : "-translate-x-full md:translate-x-0",
+            "bg-white border-r border-[#E4E8F4] flex flex-col shrink-0 py-5 h-screen sticky top-0 z-40 transition-all duration-300 ease-in-out relative overflow-hidden",
+            leftSidebarExpanded ? "w-[clamp(180px,14vw,220px)]" : "w-16"
           )}
-          style={{ width: sidebarWidth }}
         >
-          {/* logo + workspace */}
-          <div className="px-4 pt-5 pb-3 flex items-center justify-between gap-2">
-            <div className="min-w-0 flex-1">
-              <EsaLogo withWord={!sidebarCollapsed} />
-              {!sidebarCollapsed && (
-                <button className="mt-2 flex items-center gap-1 text-[12px] text-text-secondary hover:text-text-primary truncate max-w-full">
-                  <span className="truncate">{user.workspace}</span>
-                  <ChevronDown className="w-3.5 h-3.5 shrink-0" />
-                </button>
-              )}
+          {/* Inner clip wrapper */}
+          <div className={cn("flex flex-col h-full shrink-0 transition-all duration-300 w-full", leftSidebarExpanded ? "px-3" : "px-2")}>
+            {/* logo */}
+            <div className={cn("mb-8 flex items-center shrink-0 w-full transition-all duration-300", leftSidebarExpanded ? "px-2.5 justify-start" : "justify-center")}>
+              <Link to="/dashboard">
+                <EsaLogo size={28} withWord={leftSidebarExpanded} />
+              </Link>
             </div>
-            {/* collapse toggle — desktop only */}
-            <button
-              className="hidden md:flex text-text-tertiary hover:text-text-primary p-1 shrink-0"
-              onClick={() => setSidebarCollapsed((v) => !v)}
-              aria-label="Toggle sidebar"
-            >
-              {sidebarCollapsed
-                ? <PanelLeftOpen className="w-4 h-4" />
-                : <PanelLeftClose className="w-4 h-4" />}
-            </button>
-          </div>
 
-          <div className="h-px bg-border" />
-
-          {/* nav links */}
-          <nav className="flex-1 p-2 space-y-0.5 overflow-y-auto">
-            {NAV.map((item) => {
-              const active =
-                location.pathname === item.to ||
-                (item.to !== "/dashboard" && location.pathname.startsWith(item.to));
-              const Icon = item.icon;
-              return (
-                <Link
-                  key={item.to}
-                  to={item.to}
-                  onClick={() => setSidebarOpen(false)}
-                  className={cn(
-                    "flex items-center gap-2.5 h-9 rounded-md px-3 text-[13.5px] transition-colors relative",
-                    active
-                      ? "text-primary font-medium"
-                      : "text-text-secondary hover:bg-secondary hover:text-text-primary",
-                  )}
-                  style={active ? { background: "rgba(79,110,247,0.08)" } : undefined}
-                  title={sidebarCollapsed ? item.label : undefined}
-                >
-                  {active && (
-                    <span className="absolute left-0 top-1.5 bottom-1.5 w-[2px] rounded-r bg-primary" />
-                  )}
-                  <Icon className="w-4 h-4 shrink-0" strokeWidth={1.5} />
-                  {!sidebarCollapsed && <span>{item.label}</span>}
-                </Link>
-              );
-            })}
-          </nav>
-
-          <div className="h-px bg-border" />
-
-          {/* user row */}
-          <div className="p-3 flex items-center gap-2">
-            <Link to="/profile" className="flex items-center gap-2 flex-1 min-w-0 group">
-              <div className="w-8 h-8 rounded-full shrink-0 flex items-center justify-center text-white text-[12px] font-semibold"
-                   style={{ background: "linear-gradient(135deg,#4F6EF7,#9B72F7)" }}>
-                {user.initials}
-              </div>
-              {!sidebarCollapsed && (
-                <div className="min-w-0 flex-1">
-                  <div className="text-[13px] text-text-primary truncate group-hover:text-primary">{user.name}</div>
-                  <div className="flex items-center gap-1 mt-0.5">
-                    <span className="text-[10px] px-1.5 py-0.5 rounded-full font-medium text-white"
-                          style={{ background: ROLE_COLORS[user.role] }}>
-                      {ROLE_LABELS[user.role]}
+            {/* navigation icons */}
+            <nav className="flex-1 flex flex-col gap-4 w-full">
+              {[
+                { to: "/dashboard", label: "Home", icon: LayoutDashboard },
+                { to: "/chat", label: "AI Chat / Agents", icon: MessageSquare },
+                { to: "/team", label: "Teams", icon: Users },
+              ].map((item) => {
+                const active = location.pathname === item.to || (item.to !== "/dashboard" && location.pathname.startsWith(item.to));
+                const Icon = item.icon;
+                return (
+                  <Link
+                    key={item.to}
+                    to={item.to}
+                    className={cn(
+                      "relative h-11 rounded-xl flex items-center gap-3.5 transition-all group w-full px-3.5",
+                      active
+                        ? "bg-primary/10 text-primary shadow-xs"
+                        : "text-text-secondary hover:bg-secondary hover:text-text-primary"
+                    )}
+                    title={leftSidebarExpanded ? "" : item.label}
+                  >
+                    <Icon className="w-5 h-5 shrink-0 transition-transform duration-200 group-hover:scale-105" strokeWidth={1.5} />
+                    <span 
+                      className={cn(
+                        "text-[12.5px] font-bold tracking-tight whitespace-nowrap overflow-hidden transition-all duration-300 flex-1 text-left",
+                        leftSidebarExpanded ? "opacity-100 max-w-[160px] translate-x-0" : "opacity-0 max-w-0 -translate-x-2 pointer-events-none"
+                      )}
+                    >
+                      {item.label}
                     </span>
-                  </div>
-                </div>
-              )}
-            </Link>
+                    {active && (
+                      <span className="absolute left-0 top-3 bottom-3 w-[3px] rounded-r bg-primary" />
+                    )}
+                    {/* Tooltip hint when collapsed only */}
+                    {!leftSidebarExpanded && (
+                      <span className="absolute left-14 bg-text-primary text-white text-[11px] font-semibold px-2 py-1 rounded shadow-md opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap pointer-events-none z-50">
+                        {item.label}
+                      </span>
+                    )}
+                  </Link>
+                );
+              })}
+            </nav>
+
+            {/* bottom area */}
+            <div className="flex flex-col gap-4 mt-auto w-full relative">
+              {/* Coins / Billing */}
+              <Link
+                to="/billing"
+                className={cn(
+                  "relative h-11 rounded-xl flex items-center gap-3.5 transition-all group w-full px-3.5",
+                  location.pathname.startsWith("/billing")
+                    ? "bg-primary/10 text-primary"
+                    : "text-text-secondary hover:bg-secondary hover:text-text-primary"
+                )}
+                title={leftSidebarExpanded ? "" : "Plans & credits"}
+              >
+                <CreditCard className="w-5 h-5 shrink-0 transition-transform duration-200 group-hover:scale-105" strokeWidth={1.5} />
+                <span
+                  className={cn(
+                    "text-[12.5px] font-bold tracking-tight whitespace-nowrap overflow-hidden transition-all duration-300 flex-1 text-left",
+                    leftSidebarExpanded ? "opacity-100 max-w-[160px] translate-x-0" : "opacity-0 max-w-0 -translate-x-2 pointer-events-none"
+                  )}
+                >
+                  Plans & credits
+                </span>
+                {!leftSidebarExpanded && (
+                  <span className="absolute left-14 bg-text-primary text-white text-[11px] font-semibold px-2 py-1 rounded shadow-md opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap pointer-events-none z-50">
+                    Plans & credits
+                  </span>
+                )}
+              </Link>
+
+              {/* Settings Gear Popover */}
+              <div className="relative w-full">
+                <button
+                  onClick={() => setSettingsOpen(!settingsOpen)}
+                  className={cn(
+                    "h-11 rounded-xl flex items-center gap-3.5 transition-all cursor-pointer w-full px-3.5",
+                    settingsOpen 
+                      ? "bg-secondary text-text-primary" 
+                      : "text-text-secondary hover:bg-secondary hover:text-text-primary"
+                  )}
+                  title={leftSidebarExpanded ? "" : "Settings & Account"}
+                >
+                  <Settings className={cn("w-5 h-5 shrink-0 transition-transform duration-300", settingsOpen && "rotate-45")} strokeWidth={1.5} />
+                  <span
+                    className={cn(
+                      "text-[12.5px] font-bold tracking-tight whitespace-nowrap overflow-hidden transition-all duration-300 flex-1 text-left",
+                      leftSidebarExpanded ? "opacity-100 max-w-[160px] translate-x-0" : "opacity-0 max-w-0 -translate-x-2 pointer-events-none"
+                    )}
+                  >
+                    Settings
+                  </span>
+                  {!leftSidebarExpanded && (
+                    <span className="absolute left-14 bg-text-primary text-white text-[11px] font-semibold px-2 py-1 rounded shadow-md opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap pointer-events-none z-50">
+                      Settings & Account
+                    </span>
+                  )}
+                </button>
+
+                {/* Popover Menu matching screenshot exactly */}
+                {settingsOpen && (
+                  <>
+                    {/* Backdrop to close click */}
+                    <div className="fixed inset-0 z-40" onClick={() => setSettingsOpen(false)} />
+                    <div
+                      className={cn(
+                        "absolute bottom-0 bg-white rounded-xl border border-[#D6DCF0] py-2 shadow-lg z-50 animate-in fade-in-50 zoom-in-95 w-52",
+                        leftSidebarExpanded ? "left-[clamp(180px,14vw,220px)]" : "left-12"
+                      )}
+                      style={{ filter: "drop-shadow(0 10px 24px rgba(79,110,247,0.08))" }}
+                    >
+                      {[
+                        { to: "/profile", label: "Account" },
+                        { to: "/billing", label: "Plans & credits" },
+                        { to: "/settings", label: "Support", action: () => { alert("Support ticket system is ready. Contact arjun.mehta@acmecorp.com"); setSettingsOpen(false); } },
+                        { to: "/analytics", label: "Observability" },
+                        { to: "/settings/memory", label: "Key Vault" },
+                        { to: "/admin/control-room", label: "Key Integration" },
+                        { to: "/login", label: "Sign out", className: "text-red-500 hover:bg-red-50" },
+                      ].map((opt, i) => (
+                        opt.action ? (
+                          <button
+                            key={i}
+                            onClick={opt.action}
+                            className="w-full text-left px-4 py-2 text-xs font-semibold text-text-secondary hover:bg-secondary hover:text-text-primary cursor-pointer"
+                          >
+                            {opt.label}
+                          </button>
+                        ) : (
+                          <Link
+                            key={i}
+                            to={opt.to}
+                            onClick={() => setSettingsOpen(false)}
+                            className={cn(
+                              "block px-4 py-2 text-xs font-semibold text-text-secondary hover:bg-secondary hover:text-text-primary",
+                              opt.className
+                            )}
+                          >
+                            {opt.label}
+                          </Link>
+                        )
+                      ))}
+                    </div>
+                  </>
+                )}
+              </div>
+
+              {/* Sidebar Expand/Shrink Action Button */}
+              <button
+                onClick={() => setLeftSidebarExpanded(!leftSidebarExpanded)}
+                className={cn(
+                  "h-11 rounded-xl flex items-center transition-all cursor-pointer text-text-secondary hover:bg-secondary hover:text-text-primary shrink-0 w-full px-3.5 gap-3.5",
+                  leftSidebarExpanded ? "justify-start" : "justify-center"
+                )}
+                title={leftSidebarExpanded ? "Collapse navigation" : "Expand navigation"}
+              >
+                {leftSidebarExpanded ? (
+                  <>
+                    <PanelLeftClose className="w-5 h-5 shrink-0 animate-in fade-in duration-300" strokeWidth={1.5} />
+                    <span className="text-[12px] font-bold tracking-tight whitespace-nowrap overflow-hidden transition-all duration-300 text-left">
+                      Collapse
+                    </span>
+                  </>
+                ) : (
+                  <PanelLeftOpen className="w-5 h-5 shrink-0 animate-in fade-in duration-300" strokeWidth={1.5} />
+                )}
+              </button>
+            </div>
           </div>
         </aside>
       </>
@@ -167,22 +275,15 @@ export function DashboardLayout({
             >
               <Menu className="w-5 h-5" strokeWidth={1.5} />
             </button>
-            {/* collapse toggle — desktop, shown in header when sidebar is collapsed */}
-            {sidebarCollapsed && (
-              <button
-                className="hidden md:flex p-1.5 hover:bg-secondary rounded-md text-text-secondary"
-                onClick={() => setSidebarCollapsed(false)}
-                aria-label="Expand sidebar"
-              >
-                <PanelLeftOpen className="w-4 h-4" strokeWidth={1.5} />
-              </button>
-            )}
             <h1 className="text-[15px] font-semibold text-text-primary">{title}</h1>
           </div>
           <div className="flex items-center gap-2">
             <button className="p-2 hover:bg-secondary rounded-md text-text-secondary">
               <Search className="w-4.5 h-4.5" strokeWidth={1.5} />
             </button>
+            
+            <PersonaSwitcher />
+            
             <button className="p-2 hover:bg-secondary rounded-md text-text-secondary relative">
               <Bell className="w-4.5 h-4.5" strokeWidth={1.5} />
               <span className="absolute top-1.5 right-1.5 w-1.5 h-1.5 rounded-full bg-danger" />
@@ -285,7 +386,13 @@ export function DefaultRightPanel({ activeAgents = [] as AgentKey[] }: { activeA
         <div className="space-y-2">
           {(Object.keys(AGENT_META) as AgentKey[]).map((k) => {
             const meta = AGENT_META[k];
+            const { activePersona } = usePersona();
+            const isPersonaAgent = activePersona?.agents.includes(k);
             const isActive = activeAgents.includes(k);
+
+            // Hide agents not active in current persona
+            if (!isPersonaAgent) return null;
+
             return (
               <div key={k} className="flex items-center gap-2 text-[12px]">
                 <span className="w-2 h-2 rounded-full shrink-0 transition-all"
